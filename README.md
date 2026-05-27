@@ -70,10 +70,9 @@ This repository will evolve continuously as I learn, experiment, and build backe
 
 ```bash
 src/
-├── routes/          # Express routing (Phase 1)
-├── controllers/     # Request handlers
-├── models/          # Database schemas / Entities
-├── middlewares/     # Auth, logging, error handling
-├── modules/         # NestJS Feature Modules (Phase 2)
-├── config/          # Environment variables and DB configs
-└── app.ts           # Application entry point
+├── routes/
+├── controllers/
+├── models/
+├── middlewares/
+├── config/
+└── app.js
