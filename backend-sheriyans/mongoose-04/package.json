@@ -1,0 +1,17 @@
+{
+  "name": "mongoose-04",
+  "version": "1.0.0",
+  "description": "*Already covered in previous experiments.*\r Express acts as the minimal, flexible routing framework for Node.js, handling HTTP requests (`GET`, `POST`, etc.) and serving as the middleman between our client endpoints and the database server.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "dependencies": {
+    "express": "^5.2.1",
+    "mongoose": "^9.6.3"
+  }
+}
