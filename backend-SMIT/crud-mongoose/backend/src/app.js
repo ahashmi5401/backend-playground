@@ -2,9 +2,12 @@ import express from "express"
 import { UserSchema } from "./model/users.model.js";
 import mongoose from "mongoose";
 export const app = express();
+import cors from 'cors'
 
 //middleware
 app.use(express.json());
+
+app.use(cors())
 
 
 app.get('/', (req , res) => {
@@ -97,7 +100,11 @@ app.patch("/users/:username" , async (req ,res) => {
             }
         let user = await UserSchema.findOneAndUpdate(
             {username},
-            {$set:updatedData}
+            {$set:updatedData},
+             {
+        new: true,           // return updated document
+        runValidators: true  // ensure schema rules apply
+      }
         )
         if (!user) {
                 return res.status(404).json({ message: "User not found" });
