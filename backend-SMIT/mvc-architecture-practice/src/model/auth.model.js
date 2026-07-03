@@ -16,6 +16,10 @@ const userSchema = new mongoose.Schema({
         minlength : [8 , "password length minimum 8 "],
         select: false // Automatically excludes password from query results by default   
     },
+    age:{
+        type:Number,
+        min:12
+    },
     role :{
         type:"String",
         enum:["student" , "teacher" , "admin"],
