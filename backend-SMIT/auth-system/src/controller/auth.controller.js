@@ -4,6 +4,7 @@ import bcrypt from "bcrypt"
 import { comparePassword, hashedPassword } from "../utils/passwordUtils.js";
 import jwt from "jsonwebtoken"
 import {config} from '../config/env.config.js'
+import cookie from "cookie"
 
 const signup = async (req , res , next)=> {
     try{
@@ -57,11 +58,10 @@ const login = async (req  , res , next ) => {
             let passMatch = await comparePassword(password , existUser.password);
             if(passMatch){
                 let token = jwt.sign({_id : existUser._id}, config.JWT_SECRET,{expiresIn : "1d"})
-                console.log(token);
+                res.cookie("token" , token)
                return res.status(201).json({
                     status:true,
                     message:"user login succesfully",
-                    token
                 })
             }
             throw new AppError("Password Incorrect " , 400)
@@ -71,4 +71,23 @@ const login = async (req  , res , next ) => {
         next(error)
     }
 }
-export {signup , login}
+
+
+const update = async (req , res , next)=> {
+    try{
+        let updatedData = req.body;
+
+       
+        
+        const updateUser = await User.findOneAndUpdate( {_id : req.user._id }, updatedData , {new:true} )
+        
+        return res.status(200).json({
+            status : true,
+            message:"user updated sucessfully",
+            data:updateUser
+        })
+    }catch(error){
+        next(error)
+    }
+}
+export {signup , login , update}
