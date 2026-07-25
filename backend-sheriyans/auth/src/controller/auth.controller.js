@@ -1,4 +1,4 @@
-import bcrypt from "bcrypt";
+import bcrypt, { hash } from "bcrypt";
 import jwt from "jsonwebtoken";
 import { User } from "../model/user.model.js";
 import AppError from "../utils/appError.js";
@@ -6,7 +6,9 @@ import { COOKIE_OPTIONS } from "../utils/cookieOption.js";
 import { assignJWT } from "../utils/jwt.js";
 import { hashedPassword } from "../utils/passwordHash.js";
 import { sessionModel } from "../model/session.model.js";
-
+import { generateOTP, otpHTML } from "../utils/otp.js";
+import { OTP } from "../model/otp.model.js";
+import { sendEmail } from "../service/email.service.js"
 const signup = async (req, res, next) => {
     try {
         const { username, email, password } = req.body;
@@ -18,7 +20,6 @@ const signup = async (req, res, next) => {
         const normalizedEmail = email.trim().toLowerCase();
         const trimmedUsername = username.trim();
 
-        // Unique user check
         const existingUser = await User.findOne({
             $or: [{ email: normalizedEmail }, { username: trimmedUsername }],
         });
@@ -32,7 +33,6 @@ const signup = async (req, res, next) => {
             }
         }
 
-        // Password Hash & User Save
         const hash = await hashedPassword(password);
 
         const newUser = new User({
@@ -40,32 +40,43 @@ const signup = async (req, res, next) => {
             email: normalizedEmail,
             password: hash,
         });
+
         await newUser.save();
 
-        // 1. Session Document create karo
-        const session = await sessionModel.create({
+        console.log("About to generate OTP...");
+        let otp = generateOTP()
+        console.log("Generated OTP:", otp);
+
+        const html = otpHTML(otp)
+
+        let otpHash = await hashedPassword(otp)
+        console.log("User saved");
+        await OTP.deleteMany({ email: normalizedEmail }); 
+        await OTP.create({
+            email: normalizedEmail,
             user: newUser._id,
-            refreshTokenHash: "pending",
-            revoked: false,
-            ip: req.ip,
-            userAgent: req.headers["user-agent"]
+            otp: otpHash,
         });
 
-        const accessToken = assignJWT({ id: newUser._id, sessionId: session._id }, "15m");
-        const refreshToken = assignJWT({ id: newUser._id, sessionId: session._id }, "7d");
+        console.log("OTP saved");
 
-        session.refreshTokenHash = await hashedPassword(refreshToken);
-        await session.save();
+        await sendEmail(
+            normalizedEmail,
+            "OTP VERIFICATION",
+            otpHTML(trimmedUsername, otp)
+        );
 
-        res.cookie("refreshToken", refreshToken, COOKIE_OPTIONS);
-
-
+        console.log("Email sent successfully");
 
         return res.status(201).json({
             success: true,
             message: "User registered successfully",
-            user: newUser,
-            accessToken
+            user: {
+                email,
+                username,
+                isVerified: newUser.isVerified
+            },
+            otp: otp // Temporary for testing
         });
 
     } catch (error) {
@@ -83,6 +94,7 @@ const login = async (req, res, next) => {
             throw new AppError("Email and password are required", 400);
         }
 
+        if (!req.body.isVerified) throw new AppError("Email not verified")
         const normalizedEmail = email.trim().toLowerCase();
 
         // 2. Single DB Query
@@ -199,28 +211,63 @@ const logout = async (req, res, next) => {
 };
 
 
-const logoutFromAll = async (req , res , next) => {
-    try{
+const logoutFromAll = async (req, res, next) => {
+    try {
         const refreshToken = req.cookies.refreshToken;
         if (!refreshToken) throw new AppError("Refresh Token is not found", 400);
 
-        const decode =  jwt.verify(refreshToken , process.env.JWT_SECRET)
+        const decode = jwt.verify(refreshToken, process.env.JWT_SECRET)
 
- const session = await sessionModel.updateMany(
-    { user: decode.id, revoked: false }, // 👈 'user' aur 'revoked'
-    { revoked: true }                    // 👈 'revoked: true'
-);
-         if (result.matchedCount === 0) throw new AppError("No active sessions found or already logged out", 400);
+        const result = await sessionModel.updateMany(
+            { user: decode.id, revoked: false }, // 👈 'user' aur 'revoked'
+            { revoked: true }                    // 👈 'revoked: true'
+        );
+        if (result.matchedCount === 0) throw new AppError("No active sessions found or already logged out", 400);
 
-         res.clearCookie("refreshToken" , COOKIE_OPTIONS)
+        res.clearCookie("refreshToken", COOKIE_OPTIONS)
 
-         return res.status(200).json({
-            status:"success",
-            message:"logout from all device"
-         })
-    }catch (error){
+        return res.status(200).json({
+            status: "success",
+            message: "logout from all device"
+        })
+    } catch (error) {
         next(error)
     }
 }
 
-export { signup, refreshToken, logout  , logoutFromAll , login};
+const verifyEmail = async (req, res, next) => {
+    try {
+        const { otp, email } = req.body;
+
+        console.log("Verify Email - Email:", email);
+        console.log("Verify Email - OTP:", otp);
+
+        if (!email || !otp) throw new AppError("both field are required", 401)
+
+        const finduser = await OTP.findOne({ email }).sort({ createdAt: -1 })
+        console.log("Verify Email - Found OTP record:", !!finduser);
+
+        if (!finduser) throw new AppError("user not registered", 400)
+
+        console.log("Verify Email - Stored OTP hash:", finduser.otp);
+
+        let isOtpMatch = await bcrypt.compare(otp, finduser.otp)
+        console.log("Verify Email - OTP match result:", isOtpMatch);
+
+        if (!isOtpMatch) throw new AppError("otp is invalid or expire ", 400)
+
+        const userUpdate = await User.findByIdAndUpdate(finduser.user, { isVerified: true })
+
+        // Delete OTP after successful verification
+        await OTP.deleteOne({ _id: finduser._id });
+        return res.status(200).json({
+            success: true,
+            message: "Email verified successfully",
+            user: userUpdate,
+        });
+    } catch (error) {
+        next(error)
+    }
+}
+
+export { signup, refreshToken, logout, logoutFromAll, login, verifyEmail };

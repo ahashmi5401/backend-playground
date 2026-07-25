@@ -10,6 +10,11 @@ let app = express()
 
 app.use(morgan("dev"))
 app.use(express.json());
+app.use((req, res, next) => {
+  console.log("Request Content-Type:", req.headers['content-type']);
+  console.log("Request body:", req.body);
+  next();
+});
 app.use(cors({
     origin: "http://localhost:3000",
   credentials: true
